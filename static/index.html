@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>个人助手 Agent</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f5f6fa; height: 100vh; display: flex; flex-direction: column; }
+  header { background: #fff; padding: 12px 24px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header .badge { background: #eef2ff; color: #4f46e5; padding: 3px 10px; border-radius: 999px; font-size: 12px; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #activity { width: 280px; border-right: 1px solid #e5e7eb; background: #fff; overflow-y: auto; padding: 12px; }
+  #activity h3 { font-size: 13px; color: #6b7280; margin-bottom: 8px; }
+  .section-title { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; padding: 6px 0; }
+  .section-title .arrow { display: inline-block; transition: transform .2s; color: #9ca3af; font-size: 11px; }
+  .section-title.open .arrow { transform: rotate(90deg); }
+  .section-body { overflow: hidden; }
+  .tool-card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; }
+  .tool-card .t-name { font-weight: 600; color: #4f46e5; display: flex; justify-content: space-between; }
+  .tool-card .t-body { color: #374151; margin-top: 4px; word-break: break-all; white-space: pre-wrap; }
+  .tool-card .t-time { color: #9ca3af; font-size: 11px; }
+  .tool-line { font-size: 11px; color: #6b7280; background: #f3f4f6; border-radius: 6px; padding: 3px 8px; margin: 0 0 8px 20px; display: inline-block; max-width: 80%; word-break: break-all; font-family: Consolas, monospace; }
+  .remind-item { border: 1px solid #e5e7eb; border-left: 3px solid #f97316; border-radius: 8px; padding: 6px 10px; margin-bottom: 6px; font-size: 12px; }
+  .remind-item .r-title { color: #111827; font-weight: 500; }
+  .remind-item .r-time { color: #9ca3af; font-size: 11px; margin-top: 2px; }
+  #chat { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #msgs { flex: 1; overflow-y: auto; padding: 20px; }
+  .msg { max-width: 70%; margin-bottom: 14px; padding: 10px 14px; border-radius: 12px; line-height: 1.6; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { background: #4f46e5; color: #fff; margin-left: auto; border-bottom-right-radius: 4px; }
+  .msg.assistant { background: #fff; color: #111827; border: 1px solid #e5e7eb; border-bottom-left-radius: 4px; }
+  .msg.assistant .role { font-size: 11px; color: #9ca3af; display: block; margin-bottom: 2px; }
+  .cursor { display: inline-block; width: 8px; height: 16px; background: #4f46e5; animation: blink 1s infinite; vertical-align: -2px; margin-left: 2px; }
+  @keyframes blink { 50% { opacity: 0; } }
+  #input-bar { display: flex; gap: 10px; padding: 14px 20px; background: #fff; border-top: 1px solid #e5e7eb; }
+  #input { flex: 1; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 14px; font-size: 14px; outline: none; }
+  #input:focus { border-color: #4f46e5; }
+  #send { background: #4f46e5; color: #fff; border: none; border-radius: 10px; padding: 0 20px; font-size: 14px; cursor: pointer; }
+  #send:disabled { opacity: 0.5; cursor: not-allowed; }
+  #mic { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 10px; padding: 0 14px; font-size: 16px; cursor: pointer; }
+  #mic.listening { color: #ef4444; background: #fee2e2; border-color: #f87171; }
+  .hint { color: #9ca3af; font-size: 12px; padding: 0 20px 8px; }
+  #toast-wrap { position: fixed; top: 70px; right: 20px; z-index: 999; display: flex; flex-direction: column; gap: 10px; }
+  .toast { background: #fff7ed; border: 1px solid #fdba74; border-left: 4px solid #f97316; border-radius: 10px; padding: 12px 16px; box-shadow: 0 4px 12px rgba(0,0,0,.08); font-size: 14px; min-width: 240px; animation: slideIn .3s ease; }
+  .toast .toast-title { font-weight: 600; color: #c2410c; }
+  .toast .toast-time { color: #9ca3af; font-size: 12px; margin-top: 4px; }
+  .toast .toast-close { float: right; cursor: pointer; color: #9ca3af; }
+  @keyframes slideIn { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧑‍💻 个人智能助手</h1>
+  <span class="badge" id="session-badge">会话: -</span>
+  <span class="badge" id="token-badge">已用 0 tokens</span>
+</header>
+<main>
+  <div id="toast-wrap"></div>
+  <div id="activity">
+    <div id="tool-groups"></div>
+    <h3 class="section-title" onclick="toggleSection(this)" style="margin-top:12px"><span class="arrow">▶</span>⏰ 提醒记录</h3>
+    <div class="section-body" id="reminder-history" style="display:none"><div style="color:#9ca3af;font-size:12px">暂无提醒记录</div></div>
+  </div>
+  <div id="chat">
+    <div id="msgs"></div>
+    <div class="hint">试试：帮我记个待办"周五交周报"｜大连天气怎么样？｜查我的笔记里关于 LangGraph 的要点</div>
+    <div id="input-bar">
+      <button id="mic" title="语音输入（Chrome）">🎤</button>
+      <input id="input" placeholder="输入你的需求…" />
+      <button id="send">发送</button>
+    </div>
+  </div>
+</main>
+<script>
+const sessionId = localStorage.getItem("pa_session") || ("s-" + Date.now().toString(36));
+localStorage.setItem("pa_session", sessionId);
+document.getElementById("session-badge").textContent = "本地会话";
+
+const msgsEl = document.getElementById("msgs");
+const toolList = document.getElementById("tool-list");
+const inputEl = document.getElementById("input");
+const sendBtn = document.getElementById("send");
+
+// Token 统计显示（DeepSeek 价格：输入 ¥2/M，输出 ¥8/M，粗略估算）
+const tokenBadge = document.getElementById("token-badge");
+function updateTokenBadge(ts) {
+  ts = ts || { input: 0, output: 0 };
+  const total = (ts.input || 0) + (ts.output || 0);
+  const cost = ((ts.input || 0) * 2 + (ts.output || 0) * 8) / 1e6;
+  tokenBadge.textContent = `已用 ${total.toLocaleString()} tokens ≈ ¥${cost.toFixed(4)}`;
+}
+
+// 语音输入（浏览器原生 Web Speech API，仅 Chrome 支持）
+const micBtn = document.getElementById("mic");
+let recognition = null;
+micBtn.onclick = () => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { alert("当前浏览器不支持语音输入，请使用 Chrome"); return; }
+  if (recognition) { recognition.stop(); recognition = null; micBtn.classList.remove("listening"); return; }
+  recognition = new SR();
+  recognition.lang = "zh-CN";
+  recognition.interimResults = false;
+  recognition.onresult = (e) => { inputEl.value = e.results[0][0].transcript; };
+  recognition.onend = () => { micBtn.classList.remove("listening"); recognition = null; };
+  recognition.onerror = () => { micBtn.classList.remove("listening"); recognition = null; };
+  micBtn.classList.add("listening");
+  recognition.start();
+};
+
+// 折叠面板：点击标题展开/收起
+function toggleSection(titleEl) {
+  const body = titleEl.nextElementSibling;
+  const isOpen = titleEl.classList.contains("open");
+  titleEl.classList.toggle("open", !isOpen);
+  body.style.display = isOpen ? "none" : "";
+}
+
+function addMsg(role, content) {
+  const d = document.createElement("div");
+  d.className = "msg " + role;
+  if (role === "assistant") {
+    const r = document.createElement("span");
+    r.className = "role";
+    r.textContent = "助手";
+    d.appendChild(r);
+  }
+  const t = document.createElement("span");
+  t.textContent = content;
+  d.appendChild(t);
+  msgsEl.appendChild(d);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+  return t;
+}
+
+function addToolLine(text) {
+  const d = document.createElement("div");
+  d.className = "tool-line";
+  d.textContent = text;
+  msgsEl.appendChild(d);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+  return d;
+}
+let lastToolLine = null;
+
+// 左侧工具栏：按功能分组折叠展示（工具名用中文显示）
+const toolGroupsEl = document.getElementById("tool-groups");
+const toolDisplayMap = {};
+fetch("/api/tools").then(r => r.json()).then(d => {
+  if (!d.ok) return;
+  toolGroupsEl.innerHTML = "";
+  d.groups.forEach((g, gi) => {
+    for (const t of g.tools) toolDisplayMap[t.name] = t.display;
+    const title = document.createElement("h3");
+    title.className = "section-title" + (gi === 0 ? " open" : "");
+    title.innerHTML = `<span class="arrow">▶</span>${g.group}`;
+    title.onclick = () => toggleSection(title);
+    const body = document.createElement("div");
+    body.className = "section-body";
+    if (gi !== 0) body.style.display = "none";
+    for (const t of g.tools) {
+      const card = document.createElement("div");
+      card.className = "tool-card";
+      card.innerHTML = `<div class="t-name">🔧 ${t.display}</div><div class="t-body">${t.example || t.description || ""}</div>`;
+      body.appendChild(card);
+    }
+    toolGroupsEl.appendChild(title);
+    toolGroupsEl.appendChild(body);
+  });
+});
+
+async function send() {
+  const text = inputEl.value.trim();
+  if (!text) return;
+  inputEl.value = "";
+  addMsg("user", text);
+  const cursor = document.createElement("span");
+  cursor.className = "cursor";
+  const holder = addMsg("assistant", "");
+  holder.textContent = "";
+  holder.appendChild(cursor);
+  sendBtn.disabled = true;
+
+  try {
+    const resp = await fetch("/api/chat?thread_id=" + encodeURIComponent(sessionId) +
+      "&message=" + encodeURIComponent(text), { method: "POST" });
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let curText = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split("\n\n");
+      buf = lines.pop();
+      for (const block of lines) {
+        let ev = "", data = "";
+        for (const l of block.split("\n")) {
+          if (l.startsWith("event:")) ev = l.slice(6).trim();
+          else if (l.startsWith("data:")) data = l.slice(5).trim();
+        }
+        if (!data) continue;
+        let obj; try { obj = JSON.parse(data); } catch { continue; }
+        if (ev === "token") {
+          curText += obj.content;
+          holder.textContent = curText;
+          holder.appendChild(cursor);
+          msgsEl.scrollTop = msgsEl.scrollHeight;
+        } else if (ev === "tool") {
+          const displayName = toolDisplayMap[obj.name] || obj.name;
+          if (obj.type === "start") {
+            lastToolLine = addToolLine(`🔧 ${displayName}(${JSON.stringify(obj.input)})`);
+          } else if (lastToolLine) {
+            lastToolLine.textContent += "  →  " + String(obj.output).slice(0, 80);
+          }
+        } else if (ev === "stats") {
+          updateTokenBadge(obj);
+        } else if (ev === "error") {
+          holder.textContent = "⚠️ " + obj.message;
+        }
+      }
+    }
+    if (cursor.parentNode) cursor.remove();
+  } catch (e) {
+    holder.textContent = "⚠️ 请求失败: " + e.message;
+    if (cursor.parentNode) cursor.remove();
+  }
+  sendBtn.disabled = false;
+}
+
+sendBtn.onclick = send;
+inputEl.onkeydown = (e) => { if (e.key === "Enter") send(); };
+
+// 提醒记录面板：加载历史 + 触发时实时插入
+const historyEl = document.getElementById("reminder-history");
+function addHistoryItem(title, time) {
+  const empty = historyEl.querySelector("div");
+  if (empty && historyEl.children.length === 1) historyEl.innerHTML = "";
+  const d = document.createElement("div");
+  d.className = "remind-item";
+  d.innerHTML = `<div class="r-title">⏰ ${title}</div><div class="r-time">${time}</div>`;
+  historyEl.prepend(d);
+}
+fetch("/api/reminders/history").then(r => r.json()).then(d => {
+  if (!d.ok) return;
+  historyEl.innerHTML = "";
+  if (!d.items.length) historyEl.innerHTML = '<div style="color:#9ca3af;font-size:12px">暂无提醒记录</div>';
+  for (const it of d.items) {  // 接口已倒序（最新在前），用 append 保持顺序
+    const row = document.createElement("div");
+    row.className = "remind-item";
+    row.innerHTML = `<div class="r-title">⏰ ${it.title}</div><div class="r-time">${it.triggered_at || it.time}</div>`;
+    historyEl.appendChild(row);
+  }
+});
+
+// 全局事件流：定时提醒到点 → 弹 Toast + 记录进面板
+const es = new EventSource("/api/events");
+es.onmessage = (e) => {
+  try {
+    const obj = JSON.parse(e.data);
+    if (obj.type === "reminder") {
+      showToast(obj.title, obj.time);
+      addHistoryItem(obj.title, obj.time);
+    }
+  } catch (err) { /* 忽略非 JSON 心跳 */ }
+};
+function showToast(title, time) {
+  const wrap = document.getElementById("toast-wrap");
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.innerHTML = `<span class="toast-close">✕</span><div class="toast-title">⏰ 提醒：${title}</div><div class="toast-time">${time}</div>`;
+  t.querySelector(".toast-close").onclick = () => t.remove();
+  wrap.appendChild(t);
+  setTimeout(() => t.remove(), 20000);
+}
+
+// 恢复历史
+fetch("/api/session/" + sessionId + "/history").then(r => r.json()).then(d => {
+  if (d.ok && d.messages.length) {
+    msgsEl.innerHTML = "";
+    for (const m of d.messages) addMsg(m.role === "user" ? "user" : "assistant", m.content);
+  }
+  if (d.ok && d.token_stats) updateTokenBadge(d.token_stats);
+});
+</script>
+</body>
+</html>

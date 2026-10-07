@@ -1,0 +1,28 @@
+# 环境变量（含 API Key，绝不入库）
+.env
+.env.*
+
+# 本地数据：个人笔记、会话数据库、向量库、JSON 数据（绝不入库）
+data/
+!data/notes/.gitkeep
+
+# 日志
+*.log
+server.log
+server.err.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# IDE / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 测试临时脚本
+_test_*.py
